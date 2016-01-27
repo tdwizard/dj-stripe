@@ -267,11 +267,14 @@ class StripeCustomer(StripeObject):
     def sync_card(self):
         stripe_customer = self.stripe_customer
 
-        self.card_fingerprint = stripe_customer.active_card.fingerprint
-        self.card_last_4 = stripe_customer.active_card.last4
-        self.card_kind = stripe_customer.active_card.type
-        self.card_exp_month = stripe_customer.active_card.exp_month
-        self.card_exp_year = stripe_customer.active_card.exp_year
+        for card in stripe_customer.cards.data:
+            if card.id != stripe_customer.default_card:
+                continue
+            self.card_fingerprint = card.fingerprint
+            self.card_last_4 = card.last4
+            self.card_kind = card.brand
+            self.card_exp_month = card.exp_month
+            self.card_exp_year = card.exp_year
 
     # TODO refactor, deprecation on cu parameter -> stripe_customer
     def sync(self, cu=None):
@@ -486,12 +489,12 @@ class StripeCharge(StripeObject):
         result = {
             "stripe_id": data["id"],
             "card_last_4": data["card"]["last4"],
-            "card_kind": data["card"]["type"],
+            "card_kind": data["card"]["brand"],
             "amount": (data["amount"] / decimal.Decimal("100")),
             "paid": data["paid"],
             "refunded": data["refunded"],
             "captured": data["captured"],
-            "fee": (data["fee"] / decimal.Decimal("100")),
+            "fee": (data["fee"] / decimal.Decimal("100")) if "fee" in data else 0,
             "disputed": data["dispute"] is not None,
             "charge_created": convert_tstamp(data, "created"),
         }

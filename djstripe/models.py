@@ -2,6 +2,7 @@
 from __future__ import unicode_literals
 
 import datetime
+import time
 import decimal
 import json
 import traceback as exception_traceback
@@ -27,12 +28,13 @@ from .managers import CustomerManager, ChargeManager, TransferManager
 from .signals import WEBHOOK_SIGNALS
 from .signals import subscription_made, cancelled, card_changed
 from .signals import webhook_processing_error
-from .stripe_objects import StripeEvent, StripeTransfer, StripeCustomer, StripeInvoice, StripeCharge, StripePlan, convert_tstamp
+from .stripe_objects import StripeEvent, StripeTransfer, StripeCustomer, StripeInvoice, StripeCharge, StripePlan, convert_tstamp, \
+    StripeObject
 
 logger = logging.getLogger(__name__)
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
-stripe.api_version = getattr(settings, "STRIPE_API_VERSION", "2012-11-07")
+stripe.api_version = getattr(settings, "STRIPE_API_VERSION", "2014-12-17")
 
 
 @python_2_unicode_compatible
@@ -753,6 +755,54 @@ class Plan(StripePlan):
 
         self.save()
 
+
+@python_2_unicode_compatible
+class Account(StripeObject):
+    stripe_api_name = "Account"
+
+    user = models.OneToOneField(getattr(settings, 'DJSTRIPE_SUBSCRIBER_MODEL', settings.AUTH_USER_MODEL), null=True, related_name='stripe_account')
+    card = models.CharField(max_length=200, blank=True, null=True)
+    bank_account = models.CharField(max_length=200, blank=True, null=True)
+
+    def __str__(self):
+        return self.stripe_id
+
+    @property
+    def stripe_account(self):
+        return stripe.Account.retrieve(self.stripe_id)
+
+    @classmethod
+    def get_or_create(cls, user):
+        try:
+            return Account.objects.get(user=user), False
+        except Account.DoesNotExist:
+            return cls.create(user), True
+
+    @classmethod
+    def create(cls, user, ip='127.0.0.1'):
+        stripe_account = stripe.Account.create(
+            email=user.email,
+            country=user.country,
+            managed=True
+        )
+        stripe_account.tos_acceptance.update({
+            "ip": ip,
+            "date": int(time.time())})
+        stripe_account.save()
+        acc = Account.objects.create(user=user, stripe_id=stripe_account.id)
+        return acc
+
+    def update_card(self, external_account):
+        stripe_card = self.stripe_account.external_accounts.create(external_account=external_account)
+        self.card = stripe_card.id
+        self.save()
+        return self
+
+    def create_bank_account(self, external_account):
+        stripe_bank = self.stripe_account.external_accounts.create(external_account=external_account)
+        self.bank_account = stripe_bank.id
+        self.save()
+        return self
 # Much like registering signal handlers. We import this module so that its registrations get picked up
 # the NO QA directive tells flake8 to not complain about the unused import
 from . import event_handlers  # NOQA
