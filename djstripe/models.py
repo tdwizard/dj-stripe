@@ -805,7 +805,7 @@ class Account(StripeObject):
         return self
 
     def transfer(self, amount, currency="usd"):
-
+        pass
 # Much like registering signal handlers. We import this module so that its registrations get picked up
 # the NO QA directive tells flake8 to not complain about the unused import
 from . import event_handlers  # NOQA
