@@ -756,6 +756,18 @@ class Plan(StripePlan):
         self.save()
 
 
+class AccountTransfer(StripeObject):
+    stripe_api_name = "Transfer"
+    account = models.ForeignKey('djstripe.Account')
+    amount = models.DecimalField(decimal_places=2, max_digits=7,
+                                 verbose_name="Amount", null=False)
+    currency = models.CharField(max_length=3)
+    user = models.OneToOneField(getattr(settings, 'DJSTRIPE_SUBSCRIBER_MODEL', settings.AUTH_USER_MODEL), null=True, blank=True)
+
+    class Meta:
+        verbose_name = u"Account transfer"
+
+
 @python_2_unicode_compatible
 class Account(StripeObject):
     stripe_api_name = "Account"
@@ -804,8 +816,15 @@ class Account(StripeObject):
         self.save()
         return self
 
-    def transfer(self, amount, currency="usd"):
-        pass
+    def transfer(self, amount, currency="usd", created_by=None):
+        response = stripe.Transfer.create(
+            amount=1,
+            currency='dkk',
+            destination='default_for_currency',
+            stripe_account=self.bank_account
+        )
+        Transfer.objects.create(stripe_id=response.stripe_id, account=self, currency=currency, amount=amount, created_by=created_by)
+
 # Much like registering signal handlers. We import this module so that its registrations get picked up
 # the NO QA directive tells flake8 to not complain about the unused import
 from . import event_handlers  # NOQA
