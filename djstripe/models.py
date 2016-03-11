@@ -759,10 +759,9 @@ class Plan(StripePlan):
 class AccountTransfer(StripeObject):
     stripe_api_name = "Transfer"
     account = models.ForeignKey('djstripe.Account')
-    amount = models.DecimalField(decimal_places=2, max_digits=7,
-                                 verbose_name="Amount", null=False)
+    amount = models.DecimalField(decimal_places=2, max_digits=7, verbose_name="Amount", null=False)
     currency = models.CharField(max_length=3)
-    user = models.OneToOneField(getattr(settings, 'DJSTRIPE_SUBSCRIBER_MODEL', settings.AUTH_USER_MODEL), null=True, blank=True)
+    created_by = models.ForeignKey(getattr(settings, 'DJSTRIPE_SUBSCRIBER_MODEL', settings.AUTH_USER_MODEL), null=True, blank=True)
 
     class Meta:
         verbose_name = u"Account transfer"
@@ -816,14 +815,17 @@ class Account(StripeObject):
         self.save()
         return self
 
-    def transfer(self, amount, currency="usd", created_by=None):
+    def transfer(self, amount=0, currency="usd", application_fee=0, created_by=None):
         response = stripe.Transfer.create(
-            amount=1,
+            amount=int(amount*100),
             currency='dkk',
-            destination='default_for_currency',
-            stripe_account=self.bank_account
+            destination=self.stripe_id,
+            application_fee=int(application_fee*100)
+            # destination='default_for_currency',
+            # stripe_account=self.stripe_id
         )
-        Transfer.objects.create(stripe_id=response.stripe_id, account=self, currency=currency, amount=amount, created_by=created_by)
+
+        AccountTransfer.objects.create(stripe_id=response.stripe_id, account=self, currency=currency, amount=amount, created_by=created_by)
 
 # Much like registering signal handlers. We import this module so that its registrations get picked up
 # the NO QA directive tells flake8 to not complain about the unused import
